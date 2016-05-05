@@ -1,0 +1,10 @@
+{
+    "name": "work-heatmap",
+    "title": "Work Heatmap",
+    "description": "Displays visual markers/bookmarks next to lines you've recently edited. Handy for navigating long files.",
+	"keywords": ["bookmark", "heatmap"],
+    "homepage": "https://github.com/gem0303/work-heatmap",
+    "version": "0.5",
+    "author": "Gwen Mullinix <gwen.em@gmail.com>",
+    "license": "MIT"
+}
