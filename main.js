@@ -44,12 +44,27 @@ define(function (require, exports, module) {
 	
 	// Extension variables
 	var _enabled = true,
-		scrollTrackPositions = [];
+		scrollTrackPositions = [],
+		gutterName = "CodeMirror-heatmapGutter";
 	
+	// Make the heatmap gutter
+	function initGutter(editor) {
+		var cm = editor._codeMirror;
+		var gutters = cm.getOption("gutters").slice(0);
+		var str = gutters.join('');
+		if (str.indexOf(gutterName) === -1) {
+			gutters.unshift(gutterName);
+			cm.setOption("gutters", gutters);
+		}
+	}
+		
 	//  Main function
     function makeHeatmap() {
 		
 		var editor = EditorManager.getCurrentFullEditor();
+		
+		// TODO: figure out how often this actually needs to run
+		initGutter(editor);
 		
 		// Get line number where edit was made
 		var pos = editor.getCursorPos();
@@ -68,12 +83,32 @@ define(function (require, exports, module) {
 		
 		// TODO: more research into clearing/setting visible and what's necessary.
 		// TODO: style appearance of tick markers depending on their position in the array via classes (higher numbers = brighter, lower = darker)
-		// TODO: add line highlighting or gutter marker
+		
+		// Add scroll track markers
 		ScrollTrackMarkers.clear();		
 		ScrollTrackMarkers.setVisible(editor, true);
 		ScrollTrackMarkers.addTickmarks(editor, scrollTrackPositions);
+		
+		// Add color blocks to gutter
+		showGutterMarks(editor);
     }
 
+	function makeMarker() {
+		var marker = document.createElement("div");
+		marker.style.color = "#B5A91D";
+		marker.innerHTML = "●";
+		return marker;
+	}
+
+    function showGutterMarks(editor) {			
+			var cm = editor._codeMirror;
+			cm.clearGutter(gutterName); // clear color markers
+
+			for (var i = 0; i < scrollTrackPositions.length - 1; i++) {
+				cm.setGutterMarker(scrollTrackPositions[i].line, gutterName, makeMarker());
+			}
+	}
+	
 	function duplicateCheck(linenumber) {	
 		for (var i = 0; i < scrollTrackPositions.length - 1; i++) {
 			if (scrollTrackPositions[i].line == linenumber) {
@@ -99,18 +134,20 @@ define(function (require, exports, module) {
 	function _handlerOff(editor) {
         //_find.clear(editor);
         editor.off('keyEvent', _handler);
+		
+		scrollTrackPositions = [];
+		var cm = editor._codeMirror;
+			cm.clearGutter(gutterName); // clear color markers
+			
+		// TODO: save different scrollTrackPosition arrays for every active window, otherwise you lose them on focus change
     }
     
     function _disableHandler(editor) {
-       // editor.off('cursorActivity', _handler);
         editor.off('keyEvent', _handler);
     }
     
     function _handlerOn(editor) {
-        //editor.on('cursorActivity', _handler);
         editor.on('keyEvent', _handler);
-		scrollTrackPositions = [];
-		// TODO: save different scrollTrackPosition arrays for every active window, otherwise you lose them on focus change
     }
     
     // Toggle the extension, set the _document and register the listener.
