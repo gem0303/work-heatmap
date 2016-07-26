@@ -44,6 +44,7 @@ define(function (require, exports, module) {
 	
 	// Extension variables
 	var _enabled = true,
+		scrollTrackStorage = [],
 		scrollTrackPositions = [],
 		gutterName = "CodeMirror-heatmapGutter";
 	
@@ -60,19 +61,18 @@ define(function (require, exports, module) {
 		
 	//  Main function
     function makeHeatmap() {
-		
+					
 		var editor = EditorManager.getCurrentFullEditor();
-		
-		// TODO: figure out how often this actually needs to run
-		initGutter(editor);
-		
+		//var editor = EditorManager.getActiveEditor();
+		// Why does this line break?
+			
 		// Get line number where edit was made
 		var pos = editor.getCursorPos();
 		
 		// Loop through array and check for duplicate entries
 		duplicateCheck(pos.line);
 		
-		// Push line number to array
+		// Push line number to first position in array.
 		scrollTrackPositions.unshift(pos);
 		
 		// Clip off old entries in array
@@ -85,17 +85,58 @@ define(function (require, exports, module) {
 		// TODO: style appearance of tick markers depending on their position in the array via classes (higher numbers = brighter, lower = darker)
 		
 		// Add scroll track markers
-		ScrollTrackMarkers.clear();		
+		ScrollTrackMarkers.clear();
 		ScrollTrackMarkers.setVisible(editor, true);
 		ScrollTrackMarkers.addTickmarks(editor, scrollTrackPositions);
 		
 		// Add color blocks to gutter
 		showGutterMarks(editor);
+		
+		// Recolor the scroll track markers once they've been placed.
+		recolorScrollTracks(editor, scrollTrackPositions);
+		
     }
 
-	function makeMarker() {
+	function recolorScrollTracks(editor, scrollTrackPositions) {
+
+		var collection = $(editor.getRootElement()).find(".tickmark");
+		
+		for (var i = 0; i < collection.length - 1; i++) {
+			if (i == 0) {
+				//console.log("green");
+				$(collection[i]).css({"background":"#50de18", "border-top":"1px solid #50de18", "border-bottom":"1px solid #50de18"});				
+			} else if (i == 1 || i == 2 || i == 3) {
+				//console.log("yellow");
+				$(collection[i]).css({"background":"#eddd23", "border-top":"1px solid #eddd23", "border-bottom":"1px solid #eddd23"});
+			} else if (i == 4 || i == 5 || i == 6) {
+				//console.log("orange");
+				$(collection[i]).css({"background":"#ca8820", "border-top":"1px solid #ca8820", "border-bottom":"1px solid #ca8820"});
+			} else {
+				//console.log("red");
+				$(collection[i]).css({"background":"#ca3820", "border-top":"1px solid #ca3820", "border-bottom":"1px solid #ca3820"});
+			}
+			
+		}		
+	}
+	
+	
+	function makeMarker(i) {
 		var marker = document.createElement("div");
-		marker.style.color = "#B5A91D";
+		
+		if (i == 0) {
+			//console.log("green");
+			marker.style.color = "#50de18";
+		} else if (i == 1 || i == 2 || i == 3) {
+			//console.log("yellow");
+			marker.style.color = "#eddd23";
+		} else if (i == 4 || i == 5 || i == 6) {
+			//console.log("orange");
+			marker.style.color = "#ca8820";
+		} else {
+			//console.log("red");
+			marker.style.color = "#ca3820";
+		}
+		
 		marker.innerHTML = "●";
 		return marker;
 	}
@@ -105,7 +146,7 @@ define(function (require, exports, module) {
 			cm.clearGutter(gutterName); // clear color markers
 
 			for (var i = 0; i < scrollTrackPositions.length - 1; i++) {
-				cm.setGutterMarker(scrollTrackPositions[i].line, gutterName, makeMarker());
+				cm.setGutterMarker(scrollTrackPositions[i].line, gutterName, makeMarker(i));
 			}
 	}
 	
@@ -123,7 +164,7 @@ define(function (require, exports, module) {
 	var slowDown = false;
 	
 	function _handler(event, editor, keyevent) {
-		if (keyevent.type == "keyup" && slowDown == false) {
+		if (keyevent.type == "keydown" && slowDown == false) {
 			makeHeatmap();
 			slowDown = true;
 			// Only allow to re-run after a second delay
@@ -131,23 +172,20 @@ define(function (require, exports, module) {
 		}
 	}
 
-	function _handlerOff(editor) {
-        //_find.clear(editor);
-        editor.off('keyEvent', _handler);
-		
+	function _handlerOff(editor) {		
+        editor.off('keydown', _handler);		
+		ScrollTrackMarkers.setVisible(editor, false);
 		scrollTrackPositions = [];
 		var cm = editor._codeMirror;
 			cm.clearGutter(gutterName); // clear color markers
-			
-		// TODO: save different scrollTrackPosition arrays for every active window, otherwise you lose them on focus change
     }
     
     function _disableHandler(editor) {
-        editor.off('keyEvent', _handler);
+        editor.off('keydown', _handler);
     }
     
     function _handlerOn(editor) {
-        editor.on('keyEvent', _handler);
+        editor.on('keydown', _handler);
     }
     
     // Toggle the extension, set the _document and register the listener.
@@ -166,15 +204,73 @@ define(function (require, exports, module) {
             _handlerOff(editor);
         }
     }
-    
+	
+	
     // Reset the listeners when the active editor change.
     EditorManager.on("activeEditorChange",
         function (event, current, previous) {
+						
+			function saveIntoStorage() {
+				// Save track positions as object and push into storage array.	
+				var saveMe = {
+					name: previous.document.file._name,
+					positions: scrollTrackPositions
+				}				
+				scrollTrackStorage.push(saveMe);
+			}
+			
             if (_enabled) {
                 if (previous) {
+					
+					// We need to save the scroll track positions for the previous file.
+					
+					// If array is empty, just push in entry.
+					if (scrollTrackStorage.length == 0) {				
+						saveIntoStorage();
+					} else {
+						
+						var hasMatch = false;
+						
+						// Check if we already have an entry for file in scrollTrackStorage
+						for (var i = 0; i < scrollTrackStorage.length; i++) {
+							
+							// Loop through storage array and look for matching name.
+							if (scrollTrackStorage[i].name == previous.document.file._name) {
+								
+								// An entry already exists for this file. Let's empty it and then update its data.
+								scrollTrackStorage[i].positions = [];
+								scrollTrackStorage[i].positions = scrollTrackPositions;
+								hasMatch = true;
+								break;
+							}
+						}
+						
+						if (hasMatch == false) {
+							saveIntoStorage();
+						}
+					}
+					
+					// Remove key event handler from this editor.
                     _handlerOff(previous);
                 }
-                if (current) {
+				
+                if (current) {				
+					initGutter(current);				
+					
+					// Loop through storage array and look for matching name.					
+					for (var i = 0; i < scrollTrackStorage.length; i++) {			
+						
+						// Found a match, load in the saved scroll track positions.
+						if (scrollTrackStorage[i].name == current.document.file._name) {
+							scrollTrackPositions = scrollTrackStorage[i].positions;							
+							ScrollTrackMarkers.setVisible(current, true);
+							ScrollTrackMarkers.addTickmarks(current, scrollTrackPositions);
+							showGutterMarks(current);
+							recolorScrollTracks(current, scrollTrackPositions);
+							break;
+						}
+					}
+					
                     _handlerOn(current);
                 }
             }
