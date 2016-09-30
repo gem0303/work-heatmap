@@ -40,14 +40,19 @@ define(function (require, exports, module) {
 	Menus               = brackets.getModule("command/Menus"),
 	ScrollTrackMarkers  = brackets.getModule("search/ScrollTrackMarkers"),
     EditorManager  		= brackets.getModule("editor/EditorManager"),
-    KeyEvent 			= brackets.getModule("utils/KeyEvent");
+    KeyEvent 			= brackets.getModule("utils/KeyEvent"),
+	PreferencesManager = brackets.getModule("preferences/PreferencesManager");
 	
 	// Extension variables
 	var _enabled = true,
 		scrollTrackStorage = [],
 		scrollTrackPositions = [],
-		gutterName = "CodeMirror-heatmapGutter";
+		gutterName = "CodeMirror-heatmapGutter",
+		prefs = PreferencesManager.getExtensionPrefs("work-heatmap"),
+		stateManager = PreferencesManager.stateManager.getPrefixedSystem("work-heatmap");
 	
+	prefs.definePreference("gutterEnabled", "boolean", true);
+		
 	// Make the heatmap gutter
 	function initGutter(editor) {
 		var cm = editor._codeMirror;
@@ -82,16 +87,18 @@ define(function (require, exports, module) {
 		}
 		
 		// TODO: more research into clearing/setting visible and what's necessary.
-		// TODO: style appearance of tick markers depending on their position in the array via classes (higher numbers = brighter, lower = darker)
+		// TODO: Figure out why first gutter mark doesn't appear.
 		
 		// Add scroll track markers
 		ScrollTrackMarkers.clear();
 		ScrollTrackMarkers.setVisible(editor, true);
 		ScrollTrackMarkers.addTickmarks(editor, scrollTrackPositions);
 		
-		// Add color blocks to gutter
-		showGutterMarks(editor);
-		
+		// Add color blocks to gutter, if gutter is enabled
+		if (prefs.get("gutterEnabled")) {
+			showGutterMarks(editor);
+		}
+	
 		// Recolor the scroll track markers once they've been placed.
 		recolorScrollTracks(editor, scrollTrackPositions);
 		
@@ -255,7 +262,10 @@ define(function (require, exports, module) {
                 }
 				
                 if (current) {				
-					initGutter(current);				
+					
+					if (prefs.get("gutterEnabled")) {
+						initGutter(current);
+					}					
 					
 					// Loop through storage array and look for matching name.					
 					for (var i = 0; i < scrollTrackStorage.length; i++) {			
@@ -265,8 +275,12 @@ define(function (require, exports, module) {
 							scrollTrackPositions = scrollTrackStorage[i].positions;							
 							ScrollTrackMarkers.setVisible(current, true);
 							ScrollTrackMarkers.addTickmarks(current, scrollTrackPositions);
-							showGutterMarks(current);
 							recolorScrollTracks(current, scrollTrackPositions);
+
+							if (prefs.get("gutterEnabled")) {
+								showGutterMarks(current);
+							}						
+							
 							break;
 						}
 					}
