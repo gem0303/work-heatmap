@@ -36,12 +36,12 @@ define(function (require, exports, module) {
     "use strict";
 
 	// Brackets modules
-    var CommandManager  = brackets.getModule("command/CommandManager"),
-	Menus               = brackets.getModule("command/Menus"),
-	ScrollTrackMarkers  = brackets.getModule("search/ScrollTrackMarkers"),
-    EditorManager  		= brackets.getModule("editor/EditorManager"),
-    KeyEvent 			= brackets.getModule("utils/KeyEvent"),
-	PreferencesManager = brackets.getModule("preferences/PreferencesManager");
+    var CommandManager  	= brackets.getModule("command/CommandManager"),
+		Menus               = brackets.getModule("command/Menus"),
+		ScrollTrackMarkers  = brackets.getModule("search/ScrollTrackMarkers"),
+		EditorManager  		= brackets.getModule("editor/EditorManager"),
+		KeyEvent 			= brackets.getModule("utils/KeyEvent"),
+		PreferencesManager	= brackets.getModule("preferences/PreferencesManager");
 	
 	// Extension variables
 	var _enabled = true,
@@ -51,7 +51,15 @@ define(function (require, exports, module) {
 		prefs = PreferencesManager.getExtensionPrefs("work-heatmap"),
 		stateManager = PreferencesManager.stateManager.getPrefixedSystem("work-heatmap");
 	
+	// Set preferences
 	prefs.definePreference("gutterEnabled", "boolean", true);
+	var gutterEnabled = prefs.get("gutterEnabled");
+	
+	prefs.definePreference("maxMarkers", "number", 10);
+	var maxMarkers = prefs.get("maxMarkers");	
+	// Make sure the # of yellow, orange and red markers are (roughly) even
+	// Subtract 1 to account for the sole green marker
+	var markerGroup = Math.floor((maxMarkers-1)/3);
 		
 	// Make the heatmap gutter
 	function initGutter(editor) {
@@ -63,14 +71,10 @@ define(function (require, exports, module) {
 			cm.setOption("gutters", gutters);
 		}
 	}
-		
+	
 	//  Main function
-    function makeHeatmap() {
-					
-		var editor = EditorManager.getCurrentFullEditor();
-		//var editor = EditorManager.getActiveEditor();
-		// Why does this line break?
-			
+    function makeHeatmap(editor) {
+				
 		// Get line number where edit was made
 		var pos = editor.getCursorPos();
 		
@@ -81,45 +85,41 @@ define(function (require, exports, module) {
 		scrollTrackPositions.unshift(pos);
 		
 		// Clip off old entries in array
-		// TODO: make the length a preference
-		if (scrollTrackPositions.length > 10) {
-			scrollTrackPositions.length = 10;
+		if (scrollTrackPositions.length > maxMarkers) {
+			scrollTrackPositions.length = maxMarkers;
 		}
-		
-		// TODO: more research into clearing/setting visible and what's necessary.
-		// TODO: Figure out why first gutter mark doesn't appear.
+				
+		// TODO: more research into clearing/setting visible and what's necessary.		
 		
 		// Add scroll track markers
 		ScrollTrackMarkers.clear();
 		ScrollTrackMarkers.setVisible(editor, true);
 		ScrollTrackMarkers.addTickmarks(editor, scrollTrackPositions);
 		
+		// Recolor the scroll track markers once they've been placed.
+		recolorScrollTracks(editor);
+		
 		// Add color blocks to gutter, if gutter is enabled
-		if (prefs.get("gutterEnabled")) {
+		if (gutterEnabled) {
 			showGutterMarks(editor);
 		}
-	
-		// Recolor the scroll track markers once they've been placed.
-		recolorScrollTracks(editor, scrollTrackPositions);
-		
     }
 
-	function recolorScrollTracks(editor, scrollTrackPositions) {
-
+	function recolorScrollTracks(editor) {
 		var collection = $(editor.getRootElement()).find(".tickmark");
 		
-		for (var i = 0; i < collection.length - 1; i++) {
+		for (var i = 0; i < collection.length; i++) {
 			if (i == 0) {
 				//console.log("green");
-				$(collection[i]).css({"background":"#50de18", "border-top":"1px solid #50de18", "border-bottom":"1px solid #50de18"});				
-			} else if (i == 1 || i == 2 || i == 3) {
-				//console.log("yellow");
+				$(collection[i]).css({"background":"#50de18", "border-top":"1px solid #50de18", "border-bottom":"1px solid #50de18"});
+			} else if (i >= 1 && i <= markerGroup) {
+				//console.log("yellow ", i);
 				$(collection[i]).css({"background":"#eddd23", "border-top":"1px solid #eddd23", "border-bottom":"1px solid #eddd23"});
-			} else if (i == 4 || i == 5 || i == 6) {
-				//console.log("orange");
+			} else if ( (i >= (markerGroup+1)) && (i <= (markerGroup*2)) ) {
+				//console.log("orange ", i);
 				$(collection[i]).css({"background":"#ca8820", "border-top":"1px solid #ca8820", "border-bottom":"1px solid #ca8820"});
 			} else {
-				//console.log("red");
+				//console.log("red ", i);
 				$(collection[i]).css({"background":"#ca3820", "border-top":"1px solid #ca3820", "border-bottom":"1px solid #ca3820"});
 			}
 			
@@ -133,10 +133,10 @@ define(function (require, exports, module) {
 		if (i == 0) {
 			//console.log("green");
 			marker.style.color = "#50de18";
-		} else if (i == 1 || i == 2 || i == 3) {
+		} else if (i >= 1 && i <= markerGroup) {
 			//console.log("yellow");
 			marker.style.color = "#eddd23";
-		} else if (i == 4 || i == 5 || i == 6) {
+		} else if ( (i >= (markerGroup+1)) && (i <= (markerGroup*2)) ) {
 			//console.log("orange");
 			marker.style.color = "#ca8820";
 		} else {
@@ -148,16 +148,16 @@ define(function (require, exports, module) {
 		return marker;
 	}
 
-    function showGutterMarks(editor) {			
+    function showGutterMarks(editor) {
 			var cm = editor._codeMirror;
 			cm.clearGutter(gutterName); // clear color markers
 
-			for (var i = 0; i < scrollTrackPositions.length - 1; i++) {
+			for (var i = 0; i < scrollTrackPositions.length; i++) {
 				cm.setGutterMarker(scrollTrackPositions[i].line, gutterName, makeMarker(i));
 			}
 	}
 	
-	function duplicateCheck(linenumber) {	
+	function duplicateCheck(linenumber) {
 		for (var i = 0; i < scrollTrackPositions.length - 1; i++) {
 			if (scrollTrackPositions[i].line == linenumber) {
 				// Remove the duplicate entry
@@ -172,10 +172,10 @@ define(function (require, exports, module) {
 	
 	function _handler(event, editor, keyevent) {
 		if (keyevent.type == "keydown" && slowDown == false) {
-			makeHeatmap();
+			makeHeatmap(editor);
 			slowDown = true;
-			// Only allow to re-run after a second delay
-			setTimeout(function(){slowDown = false;},1000);
+			// Only allow to re-run after a short delay
+			setTimeout(function(){slowDown = false;}, 750);
 		}
 	}
 
@@ -186,11 +186,7 @@ define(function (require, exports, module) {
 		var cm = editor._codeMirror;
 			cm.clearGutter(gutterName); // clear color markers
     }
-    
-    function _disableHandler(editor) {
-        editor.off('keydown', _handler);
-    }
-    
+        
     function _handlerOn(editor) {
         editor.on('keydown', _handler);
     }
@@ -209,11 +205,14 @@ define(function (require, exports, module) {
             _handlerOn(editor);
         } else {
             _handlerOff(editor);
+			
+			// Also clear all stored positions
+			scrollTrackStorage = [];
         }
     }
 	
 	
-    // Reset the listeners when the active editor change.
+    // Reset the listeners when the active editor changes.
     EditorManager.on("activeEditorChange",
         function (event, current, previous) {
 						
@@ -261,9 +260,9 @@ define(function (require, exports, module) {
                     _handlerOff(previous);
                 }
 				
-                if (current) {				
+                if (current) {
 					
-					if (prefs.get("gutterEnabled")) {
+					if (gutterEnabled) {
 						initGutter(current);
 					}					
 					
@@ -272,12 +271,14 @@ define(function (require, exports, module) {
 						
 						// Found a match, load in the saved scroll track positions.
 						if (scrollTrackStorage[i].name == current.document.file._name) {
-							scrollTrackPositions = scrollTrackStorage[i].positions;							
+							scrollTrackPositions = scrollTrackStorage[i].positions;
 							ScrollTrackMarkers.setVisible(current, true);
 							ScrollTrackMarkers.addTickmarks(current, scrollTrackPositions);
-							recolorScrollTracks(current, scrollTrackPositions);
+							
+							// TODO, BUG: my colors get overwritten by Brackets and turn everything yellow, why?
+							recolorScrollTracks(current);
 
-							if (prefs.get("gutterEnabled")) {
+							if (gutterEnabled) {
 								showGutterMarks(current);
 							}						
 							
