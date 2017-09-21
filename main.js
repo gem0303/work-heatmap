@@ -55,6 +55,9 @@ define(function (require, exports, module) {
 	prefs.definePreference("gutterEnabled", "boolean", true);
 	var gutterEnabled = prefs.get("gutterEnabled");
 	
+	prefs.definePreference("clearOnSave", "boolean", false);	
+	var clearOnSave = prefs.get("clearOnSave");
+		
 	prefs.definePreference("maxMarkers", "number", 10);
 	var maxMarkers = prefs.get("maxMarkers");	
 	// Make sure the # of yellow, orange and red markers are (roughly) even
@@ -166,6 +169,33 @@ define(function (require, exports, module) {
 		}
 	}
 	
+	// If user has the "clear on save" preference enabled
+	if (clearOnSave) {
+		
+		function clearMarks(editor) {
+			ScrollTrackMarkers.clear();
+			var cm = editor._codeMirror;
+			cm.clearGutter(gutterName);
+			
+			// empty out the saved marks in storage too, otherwise they reappear on document change
+			for (var i = 0; i < scrollTrackStorage.length; i++) {
+				if (scrollTrackStorage[i].name == editor.document.file._path) {
+					// note that positions = [] didn't work here, only length = 0 did.
+					scrollTrackStorage[i].positions.length = 0;
+					break;
+				}
+			}
+		}
+	
+		var DocumentManager = brackets.getModule('document/DocumentManager');
+		
+		 // Attach events
+		$(DocumentManager).on("documentSaved", function() {
+            var editor = EditorManager.getCurrentFullEditor();
+			clearMarks(editor);
+        });
+	}
+	
 	// Don't run main function on literally every key press
 	// Gets laggy otherwise
 	var slowDown = false;
@@ -219,7 +249,7 @@ define(function (require, exports, module) {
 			function saveIntoStorage() {
 				// Save track positions as object and push into storage array.	
 				var saveMe = {
-					name: previous.document.file._name,
+					name: previous.document.file._path,
 					positions: scrollTrackPositions
 				}				
 				scrollTrackStorage.push(saveMe);
@@ -241,7 +271,7 @@ define(function (require, exports, module) {
 						for (var i = 0; i < scrollTrackStorage.length; i++) {
 							
 							// Loop through storage array and look for matching name.
-							if (scrollTrackStorage[i].name == previous.document.file._name) {
+							if (scrollTrackStorage[i].name == previous.document.file._path) {
 								
 								// An entry already exists for this file. Let's empty it and then update its data.
 								scrollTrackStorage[i].positions = [];
@@ -267,10 +297,10 @@ define(function (require, exports, module) {
 					}					
 					
 					// Loop through storage array and look for matching name.					
-					for (var i = 0; i < scrollTrackStorage.length; i++) {			
+					for (var i = 0; i < scrollTrackStorage.length; i++) {
 						
 						// Found a match, load in the saved scroll track positions.
-						if (scrollTrackStorage[i].name == current.document.file._name) {
+						if (scrollTrackStorage[i].name == current.document.file._path) {
 							scrollTrackPositions = scrollTrackStorage[i].positions;
 							ScrollTrackMarkers.setVisible(current, true);
 							ScrollTrackMarkers.addTickmarks(current, scrollTrackPositions);
